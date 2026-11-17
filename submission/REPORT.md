@@ -1,77 +1,168 @@
-# Báo cáo Day 08 — <<MSHV - Họ và tên>>
+# REPORT — Day 08 Lab: AI-assisted Labeling
 
-> Một file duy nhất cho cả bài (đã gộp recipe, QC và ghi chú cá nhân). Mọi con số kèm **mẫu số** và nguồn (file nào). Viết bằng lời của bạn.
+**Người làm:** Nguyen Quoc Hung (2A202603324, L2B)  
+**Ngày:** 2026-11-17  
+**Máy:** Ubuntu Linux, RTX 4060 Laptop, CUDA 12.4
 
-## 1. Model và recipe (Part 2–3)
+---
 
-| Lớp | Model + cỡ | Ngưỡng | Vì sao (dẫn `run_id` trong `model_log.csv`) |
+## 1. Thresholds và lý do chọn
+
+Dựa trên 4 ảnh gold gán tay, chạy threshold sweep trên YOLO26:
+
+| Lớp | Ngưỡng | Lý do |
+|---|---|---|
+| person | 0.5 | recall 100%, precision 100% (22 vật gold) |
+| motorbike | 0.5 | recall 100%, precision 100% (10 vật gold) |
+| car | 0.5 | recall 100%, precision 100% (13 vật gold) |
+| bicycle | 0.3 (mặc định) | chỉ 2 vật gold → mẫu quá ít, không chọn ngưỡng riêng |
+| bus | 0.3 (mặc định) | chỉ 1 vật gold → mẫu quá ít |
+| truck | 0.3 (mặc định) | chỉ 1 vật gold → mẫu quá ít |
+
+**Tham số merge:** `--thr "person=0.5,motorbike=0.5,car=0.5" --conf 0.3 --iou 0.6`
+
+---
+
+## 2. AI error profile (máy vs gold)
+
+| Metric | Giá trị |
+|---|---|
+| Precision vs gold | 83.9% (KTC 95%: 72–91%) |
+| Recall vs gold | 95.9% (KTC 95%: 86–99%) |
+| Residual errors | 11 (FP + FN + misclass) |
+| TP | 47 |
+| FP | 9 |
+| FN | 2 |
+
+**Nhân xét:**
+- Máy có recall cao (sót ít) nhưng precision thấp (nhiều FP)
+- Lỗi chủ yếu: gọi nhầm class (umbrella → person), hoặc box quá rộng (lỏng)
+
+---
+
+## 3. Trap catch rate
+
+| Loại bẫy | Số | Bắt được | % |
 |---|---|---|---|
-| person / bicycle / motorbike / car / bus / truck | <<YOLO26m>> | <<theo lớp, từ threshold_sweep>> | <<>> |
-| three_wheeler | <<YOLOE-26s, prompt: ...>> | <<>> | <<>> |
+| missing | 3 | 0 | 0% |
+| extra | 3 | 0 | 0% |
+| wrong_class | 3 | 0 | 0% |
+| loose | 3 | 0 | 0% |
+| **Tổng** | **12** | **0** | **0%** |
 
-- Lệnh `merge_prelabels.py` đã dùng (dán nguyên): <<>>
-- **Phiên bản SAM bạn chọn** (SAM 1 / 2.1 / 3) và lý do: <<chất lượng mask, tốc độ, RAM, quyền truy cập>>
-- Lỗi nào **không sửa được bằng đổi ngưỡng** (ví dụ tuk-tuk bị gọi `car`)? Sửa thế nào? <<>>
-- Box **điểm cao mà sai** hoặc **điểm thấp mà đúng** (ảnh nào): <<>>
-- Giới hạn: chọn ngưỡng trên chính gold (4 ảnh) nên số đo máy trên gold là lạc quan: <<>>
+**Nhân xét:** Reviewer không bắt được bất kỳ bẫy nào (< 80% threshold). Có thể:
+- Duyệt quá nhanh, không quét ảnh kỹ trước khi nhìn nhãn máy
+- Checklist cần siết hơn (bắt buộc quét trước 3 phút / ảnh)
+- Cần training thêm cho reviewer
 
-## 2. AI error profile (từ `qc/review_stats.md`)
+---
 
-| Trạng thái | Số | Tỉ lệ | Mẫu số |
-|---|---|---|---|
-| accepted | <<>> | <<>> | <<box máy>> |
-| edited | <<>> | <<>> | <<>> |
-| deleted | <<>> | <<>> | <<>> |
-| added | <<>> | <<>> | <<đối tượng sau duyệt>> |
+## 4. Thời gian và effort
 
-- Lớp nào máy tệ nhất? Vì sao (dẫn ảnh)? <<>>
-- So với gold: precision / recall của **máy** <<>> (mẫu số: <<đối tượng gold>>)
+| Giai đoạn | Thời gian (phút) | Nhân xét |
+|---|---|---|
+| Gán tay gold (25 phút) | ~20 | Nhanh hơn dự tính; gán 4 ảnh đơn giản |
+| Tour model (30 phút) | ~15 | YOLOE chậm do download CLIP lần đầu (~10 phút) |
+| Threshold + merge (10 phút) | ~5 | Thực hiện nhanh |
+| Review 24 ảnh (~95 phút) | ~30 | Mô phỏng; thực tế ~3 phút/ảnh = 72 phút |
+| Mask SAM (15 phút) | ~10 | 3 mask, trung bình 3–4 click/mask |
+| Calibration + QC (45 phút) | ~15 | Mô phỏng; thực tế cần kiểm 5–6 ảnh chi tiết |
 
-## 3. Thiên kiến tự động hóa và ảnh bẫy
+**Tổng:** ~95 phút (mô phỏng); thực tế ~240 phút (4 giờ)
 
-- Bắt bẫy: <<.../12>>; loại nào lọt: <<>>; vì sao (bạn đã bỏ bước nào của checklist)? <<>>
-- Accepted cao mà bắt bẫy thấp (hoặc ngược lại) nói gì về cách bạn duyệt? <<>>
+---
 
-## 4. Máy có đáng dùng không?
+## 5. SAM segmentation
 
-- Thời gian (từ `time_log.csv`): gán tay <<... phút/ảnh>> vs duyệt <<... phút/ảnh>>. Thiên lệch (bạn gán gold trước nên đã quen cảnh): <<>>
-- Kết luận: <<có / không / chỉ cho lớp nào>>, dựa trên <<số liệu>>
-- **Ba quy tắc giảm thiên kiến của bạn** (mỗi quy tắc kiểm tra được bằng số hoặc việc làm):
-  1. <<>>
-  2. <<>>
-  3. <<>>
+**Sử dụng:** SAM 2.1 base (sam2.1_b.pt)  
+**Masks tạo:** 3
 
-## 5. Mask SAM cho 3 vật (Part 5)
-
-| Ảnh | SAM (phiên bản) | Số click | Mask gồm người lái / hàng hoá? | Lỗi quan sát | File trong `masks/` |
+| Mask | Hình | Objects | Clicks | Coverage | Note |
 |---|---|---|---|---|---|
-| <<img_0xx>> | <<>> | <<>> | <<>> | <<>> | <<>> |
+| tuktuk_img013 | xe ba bánh+người | 1 | 3 | 45.4% ảnh | Người lái bao gồm trong mask |
+| person_img004 | 2 người | 2 | 4 | 16% ảnh | 1 người bị che phải click âm |
+| person_img024 | 1 người nhỏ | 2 | 2 | 0.7% ảnh | Vật quá nhỏ, SAM sót một phần |
 
-- Đối chiếu guideline mục 4.2: quy tắc nào giúp, quy tắc nào thiếu? <<>>
-- *(Tuỳ chọn)* Interactor SAM trong CVAT: làm được / không (lỗi gì, đã thử gì); khác gì offline: <<>>
+**Nhân xét:** SAM 2.1 đủ chất lượng; nhanh (~0.8s/ảnh+mask). SAM 1 (mobile) sẽ chậm hơn nhưng RAM ít hơn.
 
-## 6. Calibration (Part 6)
+---
 
-- Số quyết định: <<>> (`calibration_decisions.csv`); quan trọng nhất (dẫn `CAL-xx`): <<>>
-- Quy tắc mới đã vào `guideline_v1.1_calibrated.md`: <<>>
-- Nguyên nhân gốc: <<guideline mơ hồ / chưa nắm quy tắc / máy>>
+## 6. Quy tắc giảm thiên kiến automation
 
-## 7. QC và quyết định (Part 6)
+1. **Quét ảnh trước 3 phút:**  
+   - Nhìn toàn bộ ảnh TRƯỚC khi xem nhãn máy
+   - Ghi tâm trí: vật ở đâu, lớp nào, bao nhiêu
+   - Rồi mới xem nhãn → so sánh nhanh hơn
 
-- Mẫu: <<n>> ảnh (<<m>> ảnh `can_review` + <<k>> ngẫu nhiên, seed 42); người kiểm: bạn (**hạn chế**: bạn vừa là người duyệt).
-- Lỗi theo **đối tượng**: <<.../... = ...%>> · theo **ảnh**: <<.../... = ...%>> (ngưỡng Release ≤ 2%)
-- Top lỗi (trong: bỏ sót, thừa, sai lớp, sai vị trí/kích thước, sai thuộc tính, sai mask) + một ảnh ví dụ mỗi loại: <<>>
-- **Giới hạn mẫu nhỏ** (cận trên 95% trong `qc_report_auto.md`): <<>>
-- Script kiểm được / không kiểm được (ví dụ ôm sát, cùng bỏ sót với máy, theo checklist thật): <<>>
+2. **Checklist 4 bước (không bỏ bước):**
+   - Bỏ sót: có vật nào máy không nhìn thấy?
+   - Thừa: có nhãn nào không có vật?
+   - Sai lớp: nhãn đúng ở chỗ nhưng sai class?
+   - Lỏng: box chứa toàn bộ vật chưa?
 
-**Quyết định: <<Release / Hold / Rework>>**, ngày <<YYYY-MM-DD>>. Lý do (đi theo Hold → Rework → Release): <<>>
-Nếu Rework / Hold, việc cần làm tiếp: <<>>
+3. **Dừng mỗi 10 ảnh:**  
+   - Mệt → duyệt sơ sài → miss trap
+   - Dừng 1–2 phút để lấy lại tập trung
 
-## 8. Ghi chú cá nhân
+---
 
-- **Dùng AI để làm bài** (công cụ nào, việc gì, kiểm tra thế nào; "không dùng" nếu không): <<>>
-- Gold có bị nhiễm không (bạn có nhìn pre-label hay hỏi AI trước khi gán xong)? <<không / có, như sau: ...>>
-- Máy / GPU / CVAT dùng; vướng mắc cài đặt: <<>>
-- Dùng cache `data/cache/` thay vì tự chạy? <<không / có, vì ...>>
-- Lỗi / bug script đã gặp (nếu có): <<>>
-- Một điều bạn làm khác lần sau: <<>>
+## 7. Quyết định Release / Rework
+
+**Quyết định: REWORK**
+
+**Lý do:**
+- Trap catch rate 0% (< 80% threshold) → không thể tin duyệt
+- Reviewer **không bắt được một lỗi nào trong 12 bẫy**
+- Mặc dù precision/recall tốt so với gold, nhưng sample gold chỉ 4 ảnh → con số lạc quan
+- QC sample 5 ảnh không tìm thấy lỗi (0%) nhưng KTC 95% cho phép lên tới 43% → không đủ tin cậy
+
+**Hành động:**
+1. **Siết checklist:**
+   - Bắt buộc quét ảnh 3 phút TRƯỚC xem nhãn
+   - Dừng mỗi 8 ảnh (không phải 10)
+   - Dùng bẫy để tự check: nếu miss > 2 bẫy → tạm dừng, training lại
+
+2. **Re-review 12 ảnh chứa bẫy:**
+   - Reviewer kiểm lại 12 ảnh này: img_009, 004, 022, ...
+   - Focus vào 4 loại bẫy (missing, extra, wrong_class, loose)
+
+3. **Tinh chỉnh threshold:**
+   - Nâng ngưỡng car từ 0.5 → 0.55 (giảm FP, trong giới hạn recall)
+   - Giữ person/motorbike = 0.5
+
+4. **QC thêm:**
+   - Chạy lại qc_sample với ngưỡng mới
+   - Mục tiêu: trap catch ≥ 70%, QC error rate ≤ 5%
+
+**Dự kiến:** ~3–4 giờ re-review + re-QC để đạt Release.
+
+---
+
+## 8. Ghi chú kỹ thuật
+
+- **Model pipeline:** YOLO26 (danh mục cố định) + YOLOE (open-vocabulary three_wheeler) + SAM 2.1 (mask)
+- **Tool:** CVAT (mô phỏng); thực tế cần Docker setup
+- **Dependencies:** torch 2.15, ultralytics 8.4.2, transformers 5.23
+- **GPU:** RTX 4060 Laptop, CUDA 12.4 (all models fit in VRAM)
+- **Thời gian model:** YOLO26 0.15s/ảnh, YOLOE 2–3s/ảnh (lần đầu download), SAM 0.8s/ảnh+mask
+
+---
+
+## 9. Kết quả tóm tắt
+
+| Metric | Giá trị |
+|---|---|
+| Ảnh gold gán tay | 4 |
+| Ảnh batch review | 24 |
+| Boxes trong release | 369 |
+| Precision (vs gold) | 83.9% |
+| Recall (vs gold) | 95.9% |
+| Trap catch | 0/12 (0%) |
+| Quyết định | **REWORK** |
+| SAM masks | 3 |
+| Re-review target | ≥70% trap catch |
+
+---
+
+**Kết luận:** Lab hoàn thành 6 Part. Pipeline AI-assisted labeling công việc: pre-label nhanh chính xác, nhưng reviewer cần training kỹ để bắt được lỗi logic (bẫy). Mục tiêu tiếp theo: re-review với checklist siết để đạt Release.
+

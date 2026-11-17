@@ -1,1 +1,5 @@
-case_id,image,nguon,van_de,quyet_dinh,quy_tac_ghi_vao_guideline,phien_ban_guideline
+issue,luong_anh_af,vi_du_anh,ca_tao_ra,ca_chuyen_dung,nguon,quyet_dinh
+Threshold person quá thấp → thừa nhãn,8,img_003 img_006 img_014,thiếu,2,loi_may,Nâng ngưỡng person từ 0.5 → 0.55 để giảm FP
+Box quá lỏng → chứa cả nền,5,img_009 img_022,sai,0,loi_may,Áp dụng post-process: crop box 10% nếu đơn vật nhỏ
+YOLOE miss ba gác bị che → recall thấp,3,img_024 img_027 img_031,sót,1,cau_hoi_mo,Thêm training data: ba gác bị che lá/dây điện
+Reviewer miss bẫy 100% → duyệt chưa kỹ,0,N/A,bẫy,0,bay_lot,Bắt buộc quét ảnh 3 phút TRƯỚC xem nhãn máy

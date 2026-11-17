@@ -1,1 +1,5 @@
-run_id,part,model,params,split,n_boxes,sec_per_img,what_went_right,what_went_wrong,decision
+run_id,model,task_split,classes,conf,size,sam,params,what_went_right,what_went_wrong,decision
+1,yolo26,pilot,all,0.25,m,,Phát hiện tốt person/motorbike,Có nhiễu umbrella handbag,Chọn 0.25 cho recall cao
+2,yolo26,pilot,all,0.5,m,,Giảm nhiễu,Mất person/motorbike nhỏ,Giữ 0.25 cho production
+3,yoloe,pilot,three_wheeler,0.25,m,,Tìm được 8 ba gác/xích lô,Không có lỗi,Dùng YOLOE để bổ sung class mới
+4,yolo26 + sam,pilot,"person,motorbike,car",0.3,m,sam2.1_b.pt,Mask chính xác,Người bị che phải click nhiều,SAM 2.1 đủ cho bài
